@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Escape Room: Mitad del camino</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{--gold:#e8c46a;--paper:#f3e6c8;--panel:#2a1c12;}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:Georgia,'Times New Roman',serif;color:var(--paper);}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;}
+#hud{position:fixed;top:12px;left:14px;right:14px;display:flex;justify-content:space-between;pointer-events:none;font-size:15px;text-shadow:0 1px 4px #000;}
+#help{position:fixed;bottom:14px;left:14px;font-size:13px;opacity:.8;pointer-events:none;text-shadow:0 1px 3px #000;}
+#toast{position:fixed;z-index:10;bottom:44px;left:50%;transform:translateX(-50%);background:rgba(42,28,18,.95);padding:10px 18px;border:1px solid var(--gold);border-radius:8px;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90%;text-align:center;line-height:1.4;}
+.overlay{position:fixed;inset:0;background:rgba(10,6,3,.82);display:none;align-items:center;justify-content:center;padding:16px;overflow:auto;z-index:5;}
+.overlay.show{display:flex;}
+.panel{background:linear-gradient(#3a2817,#241709);border:2px solid #8a6a3a;border-radius:14px;max-width:660px;width:100%;padding:22px;box-shadow:0 10px 40px #000;}
+h1,h2,h3{font-family:'Times New Roman',serif;color:var(--gold);margin:0 0 10px;}
+h1{font-size:28px}h2{font-size:22px}h3{font-size:17px;margin-top:16px}
+p{line-height:1.5;margin:8px 0}
+.btn{background:linear-gradient(#c9a050,#8a6328);color:#1c1108;border:1px solid #e8c46a;border-radius:8px;padding:10px 16px;font:inherit;font-weight:bold;cursor:pointer;margin:4px;}
+.btn:hover{filter:brightness(1.1)}
+.btn.alt{background:#4a3520;color:var(--paper);border-color:#8a6a3a}
+.opt{display:block;width:100%;text-align:left;margin:8px 0;background:#3b2a1a;color:var(--paper);border:1px solid #8a6a3a;border-radius:8px;padding:12px;font:inherit;font-size:15px;cursor:pointer;line-height:1.35}
+.opt:hover:not(:disabled){border-color:var(--gold)}
+.opt:disabled{opacity:.6;cursor:default}
+.opt small{opacity:.85}
+.feedback{margin-top:12px;padding:12px;border-radius:8px;background:#1d140b;min-height:24px;font-size:15px;line-height:1.45}
+.ok{color:#a8e6a0}.bad{color:#f5a08a}
+.caso{background:#1d140b;border-left:4px solid var(--gold);padding:12px;border-radius:6px;margin:10px 0;font-style:italic;line-height:1.5}
+.bars{display:flex;gap:40px;justify-content:center;align-items:flex-end;margin:14px 0;}
+.bar{display:flex;flex-direction:column;align-items:center;font-size:14px;text-align:center;}
+.track{width:110px;height:150px;background:#1a110a;border:1px solid #8a6a3a;border-radius:6px;display:flex;align-items:flex-end;overflow:hidden;}
+.fill{width:100%;background:linear-gradient(#e0b86a,#7a5520);transition:height .9s ease;}
+.planks{display:flex;gap:6px;justify-content:center;margin:10px 0;}
+.plank{width:90px;height:22px;border-radius:3px;background:#3a2612;border:1px solid #5a3e20;}
+.plank.done{background:linear-gradient(#d8a95a,#8a5c22);border-color:var(--gold);}
+.inp{width:100%;font:inherit;font-size:22px;letter-spacing:6px;text-align:center;padding:10px;border-radius:8px;border:1px solid #8a6a3a;background:#1a110a;color:var(--gold);margin:10px 0;}
+.inp:focus{outline:1px solid var(--gold)}
+.cert{background:#f6ecd2;color:#2b1d12;border:6px double #8a6328;padding:22px;border-radius:6px;}
+.cert h2,.cert h3{color:#6b4418}
+.cert li{margin:4px 0;line-height:1.4}
+#vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,rgba(255,200,120,.0) 40%,rgba(20,8,0,.55) 80%,rgba(0,0,0,.85) 100%);z-index:2;}
+#inv{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:10px;z-index:3;pointer-events:none;}
+.slot{width:54px;height:54px;border-radius:10px;background:#3b2a1a;border:2px solid #8a6a3a;opacity:.5;}
+.slot.on{opacity:1;background:linear-gradient(#e8c46a,#8a6328);border-color:#e8c46a;box-shadow:0 0 12px #e8c46a;}
+@media print{
+  body *{visibility:hidden}
+  #cert,#cert *{visibility:visible}
+  #cert{position:absolute;left:0;top:0;width:100%;color:#000}
+  .btn{display:none}
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="vig"></div>
+
+<div id="hud"><div>Escape Room · Mitad del camino</div><div id="prog">Candados abiertos: 0/3 · <span id="tim">Tiempo: 00:00</span></div></div>
+<div id="help">Arrastra para mirar · toca lo que brilla</div>
+<div id="toast"></div>
+<div id="inv"><div class="slot"></div><div class="slot"></div><div class="slot"></div></div>
+
+<div class="overlay show" id="intro">
+  <div class="panel">
+    <h1>Escape Room: Mitad del camino</h1>
+    <p>Has llegado a una habitación en la mitad del camino. Las puertas están cerradas con candados que representan los nudos de la rutina y la pérdida de propósito. Para abrir cada puerta y avanzar hacia la segunda mitad de tu vida, deberás descifrar las pistas de tu propia historia.</p>
+    <p><em>Consejo: si te sientes bloqueado, usa el botón Pista dentro de cada reto. El robot de la butaca también tiene algo que decirte.</em></p>
+    <div style="text-align:right"><button class="btn" onclick="startGame()">Entrar a la habitación</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="ov"><div class="panel" id="ovb"></div></div>
+
+<script>
+/* ============================================================
+   ESCENA 3D
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const cv = $('c');
+const renderer = new THREE.WebGLRenderer({canvas: cv, antialias: true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a0f08);
+scene.fog = new THREE.Fog(0x1a0f08, 7, 16);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 50);
+camera.rotation.order = 'YXZ';
+camera.position.set(0, 1.55, 3.3);
+let yaw = 0, pitch = -0.04;
+
+function roundedGeo(w, h, d, r) {
+  r = Math.min(r, w / 2, h / 2, d / 2) * 0.95;
+  const g = new THREE.BoxGeometry(w, h, d, 6, 6, 6);
+  const p = g.attributes.position;
+  const hx = w / 2 - r, hy = h / 2 - r, hz = d / 2 - r;
+  const v = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    c.set(clamp(v.x, -hx, hx), clamp(v.y, -hy, hy), clamp(v.z, -hz, hz));
+    const dir = v.clone().sub(c);
+    if (dir.lengthSq() > 1e-8) { dir.normalize().multiplyScalar(r); v.copy(c).add(dir); }
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+function M(c, r = 0.8, m = 0) { return new THREE.MeshStandardMaterial({color: c, roughness: r, metalness: m}); }
+function box(w, h, d, mat, x, y, z, parent) {
+  const m = new THREE.Mesh(roundedGeo(w, h, d, Math.min(w, h, d) * 0.28), mat);
+  m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true;
+  const ol = new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({color: 0x1e120c, side: THREE.BackSide}));
+  ol.scale.set(1.035, 1.035, 1.035); m.add(ol);
+  (parent || scene).add(m); return m;
+}
+function canvasTex(w, h, draw) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
+}
+function repeatTex(t, x, y) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(x, y); return t; }
+
+/* Objetos interactivos */
+let hot = [];
+function hotify(m, action) { m.userData.action = action; hot.push(m); return m; }
+
+/* Luces */
+scene.add(new THREE.HemisphereLight(0xffe2b8, 0x2a1608, 0.55));
+const lamp = new THREE.PointLight(0xffb55c, 1.6, 9, 1.5);
+lamp.position.set(0, 3.0, 0); lamp.castShadow = true; lamp.shadow.mapSize.set(512, 512);
+scene.add(lamp);
+const warm = new THREE.PointLight(0xff9a40, 0.5, 7, 2);
+warm.position.set(-2.4, 1.8, 2.2); scene.add(warm);
+const ventana = new THREE.SpotLight(0xffd7a0, 1.4, 12, Math.PI / 5, 0.6, 1.5);
+ventana.position.set(3.2, 3.4, 2.5); ventana.target.position.set(-0.5, 0, -1); scene.add(ventana); scene.add(ventana.target);
+const rebote = new THREE.PointLight(0x6fa89a, 0.35, 6, 2);
+rebote.position.set(-2.6, 2.4, -1.2); scene.add(rebote);
+
+/* Suelo, paredes, techo */
+const floorTex = repeatTex(canvasTex(512, 512, (g, w, h) => {
+  const n = 8;
+  for (let i = 0; i < n; i++) {
+    const y = i * h / n;
+    g.fillStyle = `hsl(28,${45 + Math.random() * 10}%,${22 + Math.random() * 8}%)`;
+    g.fillRect(0, y, w, h / n);
+    g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, y, w, 3);
+    for (let k = 0; k < 40; k++) { g.fillStyle = 'rgba(0,0,0,.14)'; g.fillRect(Math.random() * w, y + Math.random() * h / n, Math.random() * 70, 1); }
+  }
+}), 2, 2);
+const wallTex = repeatTex(canvasTex(512, 256, (g, w, h) => {
+  const gr = g.createLinearGradient(0, 0, 0, h);
+  gr.addColorStop(0, '#5e3d24'); gr.addColorStop(1, '#2e1d10');
+  g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  for (let x = 0; x < w; x += 64) {
+    g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(x, 0, 3, h);
+    g.fillStyle = 'rgba(255,220,160,.05)'; g.fillRect(x + 3, 0, 22, h);
+  }
+}), 2, 1);
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.MeshStandardMaterial({map: floorTex, roughness: 0.9}));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+const wallMat = new THREE.MeshStandardMaterial({map: wallTex, roughness: 0.95});
+const back = new THREE.Mesh(new THREE.PlaneGeometry(8, 4), wallMat); back.position.set(0, 2, -4); scene.add(back);
+const front = new THREE.Mesh(new THREE.PlaneGeometry(8, 4), wallMat); front.position.set(0, 2, 4); front.rotation.y = Math.PI; scene.add(front);
+const left = new THREE.Mesh(new THREE.PlaneGeometry(8, 4), wallMat); left.position.set(-4, 2, 0); left.rotation.y = Math.PI / 2; scene.add(left);
+const right = new THREE.Mesh(new THREE.PlaneGeometry(8, 4), wallMat); right.position.set(4, 2, 0); right.rotation.y = -Math.PI / 2; scene.add(right);
+
+const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), M(0x2a180c, 1));
+ceiling.rotation.x = Math.PI / 2; ceiling.position.y = 4; scene.add(ceiling);
+[-3, -1, 1, 3].forEach(x => box(0.22, 0.28, 8, M(0x3a2412, 0.9), x, 3.86, 0));
+
+/* Lámpara colgante */
+box(0.02, 0.8, 0.02, M(0x111111), 0, 3.6, 0);
+const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.4, 0.36, 18, 1, true), new THREE.MeshStandardMaterial({color: 0x9a6a34, roughness: 0.6, side: THREE.DoubleSide}));
+shade.position.set(0, 3.2, 0); scene.add(shade);
+const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 12), new THREE.MeshBasicMaterial({color: 0xffe6a8}));
+bulb.position.set(0, 3.02, 0); scene.add(bulb);
+
+/* Alfombra */
+const rug = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), M(0x6b2c24, 1));
+rug.rotation.x = -Math.PI / 2; rug.position.set(0.1, 0.01, 0.9); rug.receiveShadow = true; scene.add(rug);
+
+/* Cajas de madera */
+box(0.6, 0.5, 0.6, M(0x6b4a2a), -3.2, 0.25, -2.8);
+box(0.5, 0.4, 0.5, M(0x5a3c20), -2.9, 0.2, -3.0);
+
+/* Estantería (pared derecha) */
+const shelf = new THREE.Group(); shelf.position.set(3.7, 0, -1.6); shelf.rotation.y = -Math.PI / 2; scene.add(shelf);
+box(0.4, 2.4, 1.3, M(0x4a2c16, 0.8), 0, 1.2, 0, shelf);
+const bookCols = [0xa33b2a, 0x2c5e7a, 0xd9a441, 0x3f7d68, 0x7a4a9a, 0xc8703a];
+[0.35, 1.0, 1.65].forEach((y, si) => {
+  box(0.36, 0.05, 1.25, M(0x3a2412), 0, y + 0.3, 0, shelf);
+  for (let k = 0; k < 7; k++) box(0.1, 0.45, 0.1, M(bookCols[(k + si) % bookCols.length]), -0.14, y + 0.55, -0.5 + k * 0.15, shelf);
+});
+
+/* Butaca verde con el robot */
+const chair = new THREE.Group(); chair.position.set(-2.6, 0, 1.4); chair.rotation.y = 0.35; scene.add(chair);
+const gm = M(0x3f7d68, 0.9);
+box(1.5, 0.42, 0.95, gm, 0, 0.3, 0, chair);
+box(1.5, 0.95, 0.25, gm, 0, 0.85, -0.4, chair);
+box(0.24, 0.62, 0.95, gm, -0.75, 0.6, 0, chair);
+box(0.24, 0.62, 0.95, gm, 0.75, 0.6, 0, chair);
+box(0.55, 0.42, 0.14, M(0x9aa3a8, 0.9), -0.25, 0.7, -0.2, chair);
+const robot = new THREE.Group(); robot.position.set(0.1, 0.52, 0.05); chair.add(robot);
+const rm = M(0x8a5a2b, 0.5, 0.4);
+const robotBody = box(0.42, 0.5, 0.32, rm, 0, 0.25, 0, robot);
+box(0.38, 0.34, 0.3, rm, 0, 0.66, 0, robot);
+[-0.09, 0.09].forEach(x => {
+  const e = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 12), new THREE.MeshStandardMaterial({color: 0x111111, emissive: 0xffb040, emissiveIntensity: 0.9}));
+  e.position.set(x, 0.68, 0.16); robot.add(e);
+});
+box(0.02, 0.14, 0.02, M(0x555555), 0, 0.9, 0, robot);
+hotify(robotBody, () => robotHint());
+
+/* Mesa y baúl (archivo) */
+const table = new THREE.Group(); table.position.set(1.5, 0, 0.3); scene.add(table);
+box(1.3, 0.08, 0.75, M(0x5a3a1e, 0.8), 0, 0.75, 0, table);
+[[-0.56, -0.3], [0.56, -0.3], [-0.56, 0.3], [0.56, 0.3]].forEach(([x, z]) => box(0.08, 0.75, 0.08, M(0x3e2612), x, 0.375, z, table));
+const chest = new THREE.Group(); chest.position.set(1.5, 0.79, 0.3); scene.add(chest);
+const chestBody = box(0.6, 0.36, 0.4, M(0x7a4a22, 0.6), 0, 0.18, 0, chest);
+box(0.62, 0.14, 0.42, M(0x6a3e1c, 0.6), 0, 0.43, 0, chest);
+box(0.12, 0.12, 0.02, M(0xd9a441, 0.35, 0.8), 0, 0.22, 0.21, chest);
+hotify(chestBody, () => openPuzzle(2));
+
+/* Puertas con candados */
+const DOORS = [
+  {id: 1, x: -2.6, title: 'I · Roles'},
+  {id: 2, x: 0, title: 'II · Rutina'},
+  {id: 3, x: 2.6, title: 'III · Bóveda'}
+];
+const doorState = {};
+function plaqueTex(text) {
+  return canvasTex(512, 140, (g, w, h) => {
+    g.fillStyle = '#2a1808'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#e8c46a'; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12);
+    g.fillStyle = '#e8c46a'; g.font = 'bold 52px Georgia'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, w / 2, h / 2 + 4);
+  });
+}
+DOORS.forEach(d => {
+  const pivot = new THREE.Group(); pivot.position.set(d.x - 0.6, 0, -3.9); scene.add(pivot);
+  const frameMat = M(0x2a180c, 0.9);
+  box(1.5, 0.12, 0.16, frameMat, d.x, 2.44, -3.92);
+  box(0.12, 2.5, 0.16, frameMat, d.x - 0.69, 1.25, -3.92);
+  box(0.12, 2.5, 0.16, frameMat, d.x + 0.69, 1.25, -3.92);
+  const panel = new THREE.Mesh(roundedGeo(1.2, 2.3, 0.07, 0.06), M(0x6b4424, 0.75));
+  panel.position.set(0.6, 1.15, 0); panel.castShadow = true; panel.receiveShadow = true; pivot.add(panel);
+  const pOl = new THREE.Mesh(panel.geometry, new THREE.MeshBasicMaterial({color: 0x1e120c, side: THREE.BackSide}));
+  pOl.scale.set(1.04, 1.04, 1.04); panel.add(pOl);
+  const inset = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.8, 0.02), M(0x4f2f18, 0.8));
+  inset.position.set(0.6, 1.15, 0.045); pivot.add(inset);
+  const lockGroup = new THREE.Group(); lockGroup.position.set(1.0, 1.15, 0.08); pivot.add(lockGroup);
+  const lockBody = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.06), M(0xd9a441, 0.35, 0.8));
+  lockGroup.add(lockBody);
+  const shackle = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.025, 8, 20, Math.PI), M(0xb0b0b0, 0.3, 0.9));
+  shackle.position.set(0, 0.12, 0); lockGroup.add(shackle);
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.36), new THREE.MeshBasicMaterial({map: plaqueTex(d.title)}));
+  label.position.set(d.x, 2.8, -3.85); scene.add(label);
+  hotify(panel, () => doorAction(d.id));
+  hotify(lockBody, () => openPuzzle(d.id));
+  doorState[d.id] = {pivot, panel, lock: lockGroup, lockBody, target: 0, open: false};
+});
+
+/* Detalles extra: cojines, frascos, cajas y banderines de colores */
+const colores = [0xd1495b, 0xedae49, 0x00798c, 0x7bb661, 0x9b5de5];
+for (let k = 0; k < 5; k++) {
+  const x = -3.6 + k * 0.28;
+  box(0.22, 0.22, 0.22, M(colores[k], 0.6), x, 0.11, -1.2 + (k % 2) * 0.3);
+}
+const frasco = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.35, 14), new THREE.MeshStandardMaterial({color: 0x5ea8a0, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.8}));
+frasco.position.set(3.3, 0.18, 2.6); scene.add(frasco);
+const esfera = new THREE.Mesh(new THREE.SphereGeometry(0.16, 20, 20), new THREE.MeshStandardMaterial({color: 0xbd3d8a, emissive: 0x3a0a22, roughness: 0.3, metalness: 0.4}));
+esfera.position.set(-1.9, 0.16, 2.6); esfera.castShadow = true; scene.add(esfera);
+for (let k = 0; k < 9; k++) {
+  const bandera = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.2, 3), new THREE.MeshStandardMaterial({color: colores[k % 5], side: THREE.DoubleSide, roughness: 0.8}));
+  bandera.position.set(-3.4 + k * 0.22, 2.9 - Math.sin(k * 0.8) * 0.08, -3.7);
+  bandera.rotation.z = Math.PI; scene.add(bandera);
+}
+
+/* Plantas en macetas redondas */
+[[-3.5, 2.2], [3.4, -2.9]].forEach(([x, z]) => {
+  const pot = new THREE.Mesh(roundedGeo(0.4, 0.4, 0.4, 0.12), M(0xc0643a));
+  pot.position.set(x, 0.2, z); pot.castShadow = true; scene.add(pot);
+  [[0, 0.65, 0, 0.32], [0.14, 0.85, 0.08, 0.22], [-0.14, 0.8, -0.06, 0.24]].forEach(([dx, dy, dz, r]) => {
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 16), M(0x5aa35a));
+    leaf.position.set(x + dx, dy, z + dz); leaf.castShadow = true; scene.add(leaf);
+  });
+});
+/* Luces de cuerda colgando del techo */
+for (let k = 0; k < 12; k++) {
+  const luz = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10), new THREE.MeshBasicMaterial({color: colores[k % 5]}));
+  luz.position.set(-3.6 + k * 0.6, 3.55 - Math.sin(k * 0.5) * 0.05, -0.5);
+  scene.add(luz);
+}
+
+/* Polvo en el aire */
+const DN = 160;
+const dpos = new Float32Array(DN * 3);
+for (let i = 0; i < DN; i++) { dpos[i*3] = (Math.random()-0.5)*7; dpos[i*3+1] = Math.random()*3.8; dpos[i*3+2] = (Math.random()-0.5)*7; }
+const dg = new THREE.BufferGeometry();
+dg.setAttribute('position', new THREE.BufferAttribute(dpos, 3));
+scene.add(new THREE.Points(dg, new THREE.PointsMaterial({color: 0xffd9a0, size: 0.035, transparent: true, opacity: 0.5, depthWrite: false})));
+
+/* ============================================================
+   INTERACCIÓN (mirar + tocar)
+   ============================================================ */
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+function hitAt(x, y) {
+  ndc.set((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const h = ray.intersectObjects(hot, false);
+  return h.length ? h[0].object : null;
+}
+let hovered = null;
+function setHover(h) {
+  if (h === hovered) return;
+  if (hovered) hovered.material.emissive.setHex(0x000000);
+  hovered = h;
+  if (h) h.material.emissive.setHex(0x4a3010);
+  cv.style.cursor = h ? 'pointer' : 'grab';
+}
+let down = false, moved = false, sx = 0, sy = 0, lx = 0, ly = 0;
+let introOn = true;
+let startT = 0;
+cv.addEventListener('pointerdown', e => { down = true; moved = false; sx = lx = e.clientX; sy = ly = e.clientY; });
+window.addEventListener('pointermove', e => {
+  if (introOn || $('ov').classList.contains('show')) { setHover(null); return; }
+  if (down) {
+    const dx = e.clientX - lx, dy = e.clientY - ly;
+    lx = e.clientX; ly = e.clientY;
+    if (Math.hypot(e.clientX - sx, e.clientY - sy) > 6) moved = true;
+    yaw = clamp(yaw - dx * 0.0045, -1.1, 1.1);
+    pitch = clamp(pitch - dy * 0.003, -0.55, 0.35);
+    setHover(null);
+  } else {
+    setHover(hitAt(e.clientX, e.clientY));
+  }
+});
+window.addEventListener('pointerup', e => {
+  if (!down) return;
+  down = false;
+  if (!moved && !introOn) {
+    const h = hitAt(e.clientX, e.clientY);
+    if (h && h.userData.action) h.userData.action();
+  }
+});
+window.addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+});
+
+/* ============================================================
+   ESTADO Y UTILIDADES DEL JUEGO
+   ============================================================ */
+const solved = {1: false, 2: false, 3: false};
+const answers = [];
+let sel3 = [];
+let toastTimer;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.style.opacity = 1;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.style.opacity = 0, 7000);
+}
+function closeBtn() {
+  return '<div style="text-align:right;margin-bottom:6px"><button class="btn alt" onclick="hideOv()">✕ Volver a la habitación</button></div>';
+}
+function showOv(html) { $('ovb').innerHTML = closeBtn() + html; $('ov').classList.add('show'); }
+function hideOv() { $('ov').classList.remove('show'); }
+window.hideOv = hideOv;
+
+function startGame() {
+  introOn = false; startT = performance.now();
+  $('intro').classList.remove('show');
+  toast('Observa la habitación. Busca los objetos que brillan.');
+}
+window.startGame = startGame;
+
+function updateProgress() {
+  const n = Object.values(solved).filter(Boolean).length;
+  $('prog').firstChild.textContent = 'Candados abiertos: ' + n + '/3 · ';
+  document.querySelectorAll('.slot').forEach((s, i) => s.classList.toggle('on', i < n));
+}
+
+function doorAction(id) {
+  const s = doorState[id];
+  if (s.open) return toast('Esta puerta ya está abierta.');
+  if (id > 1 && !solved[id - 1]) return toast('Necesitas abrir el candado anterior antes de esta puerta.');
+  toast('Toca el candado brillante para abrirlo.');
+}
+
+function robotHint() {
+  const msgs = [
+    'Robot: «No puedes con todo a la vez, pero sí puedes empezar por una parte.»',
+    'Robot: «Lo que se acumula con los años también es sabiduría. Úsala.»',
+    'Robot: «Una meta buena se puede medir y tiene plazo. Un obstáculo se rodea, no se acepta como final.»'
+  ];
+  toast(msgs[Math.floor(Math.random() * msgs.length)]);
+}
+
+function openPuzzle(n) {
+  if (solved[n]) return toast('Este candado ya está abierto.');
+  if (n === 2 && !solved[1]) return toast('Primero abre la Puerta I: la Puerta de los Roles.');
+  if (n === 3 && !solved[2]) return toast('Primero abre la Puerta II: el Archivador del Sentido.');
+  if (n === 1) return render1();
+  if (n === 2) return render2();
+  if (n === 3) return render3();
+}
+
+function unlock(n) {
+  solved[n] = true;
+  const s = doorState[n];
+  s.target = -1.3; s.open = true;
+  s.lock.visible = false;
+  hot = hot.filter(m => m !== s.lockBody);
+  hideOv();
+  updateProgress();
+  toast(n < 3 ? '¡Candado abierto! La puerta se abre lentamente.' : '¡Último candado abierto! El puente está completo.');
+  if (n === 3) setTimeout(finale, 2600);
+}
+window.unlock = unlock;
+
+/* ============================================================
+   RETO I · LA PUERTA DE LOS ROLES (Levinson)
+   ============================================================ */
+const P1 = [
+  {t: 'Soltar todas mis responsabilidades de golpe y desaparecer del mapa', ok: false,
+   m: 'Entiendo el impulso de querer soltarlo todo. Pero las transiciones de la vida suelen darse de forma gradual: un corte brusco casi siempre genera más desequilibrio. Inténtalo de nuevo.'},
+  {t: 'Seguir igual: mi espacio personal no es prioritario todavía', ok: false,
+   m: 'Es comprensible: muchas personas postergan su espacio por deber. Pero mientras nada se reorganice, la balanza seguirá igual y la vida quedará atrapada en un solo rol.'},
+  {t: 'Reducir solo mi espacio personal para cumplir mejor con todo', ok: false,
+   m: 'Esa opción quita lo único que hoy sostiene tu bienestar. Sin espacio propio, la carga se siente más pesada, no más liviana.'},
+  {t: 'Redistribuir tareas y reservar un espacio personal fijo cada semana', ok: true,
+   m: 'Así es: reorganizar la carga, en lugar de abandonarla, permite que los roles convivan. La balanza empieza a equilibrarse.'}
+];
+
+function render1() {
+  showOv(`
+    <h2>Puerta I · La Puerta de los Roles</h2>
+    <p>Tu mochila de responsabilidades laborales y familiares pesa demasiado, y tu espacio personal no tiene peso alguno. Para abrir el candado, no basta con quitar peso: hay que reorganizarlo.</p>
+    <div class="bars">
+      <div class="bar"><div class="track"><div class="fill" id="bA" style="height:100%"></div></div><span>Responsabilidades<br>100 kg</span></div>
+      <div class="bar"><div class="track"><div class="fill" id="bB" style="height:0%"></div></div><span>Espacio personal<br>0 kg</span></div>
+    </div>
+    <p><em>¿Qué harías para equilibrar la balanza?</em></p>
+    <div id="opts">${P1.map((o, i) => `<button class="opt" onclick="pick1(${i})">${o.t}</button>`).join('')}</div>
+    <div class="feedback" id="fb">Elige una opción. Si no es la correcta, la historia te explicará por qué.</div>
+    <div style="text-align:right"><button class="btn alt" onclick="hint1()">Pista</button></div>
+  `);
+}
+function hint1() { toast('Pista: el peso no desaparece, se reparte. ¿Qué parte de tu semana puedes reorganizar o compartir?'); }
+function pick1(i) {
+  const o = P1[i]; const fb = $('fb');
+  if (o.ok) {
+    answers.push({reto: 'I · Roles (Levinson)', respuesta: o.t});
+    $('bA').style.height = '60%'; $('bB').style.height = '40%';
+    fb.className = 'feedback ok';
+    fb.innerHTML = o.m + '<br><br><button class="btn" onclick="unlock(1)">Abrir el candado</button>';
+    document.querySelectorAll('.opt').forEach(b => b.disabled = true);
+  } else {
+    fb.className = 'feedback bad'; fb.textContent = o.m;
+  }
+}
+window.render1 = render1; window.pick1 = pick1; window.hint1 = hint1;
+
+/* ============================================================
+   RETO II · EL ARCHIVADOR DEL SENTIDO (Frankl)
+   ============================================================ */
+const D2 = {
+  creacion: {n: 'Cajón de Creación', d: 'Lo que puedo hacer, construir o aportar.'},
+  experiencia: {n: 'Cajón de Experiencia', d: 'Lo que viví, amé o aprendí, y que nadie me puede quitar.'},
+  actitud: {n: 'Cajón de Actitud', d: 'La postura con la que elijo afrontar lo que no puedo cambiar.'}
+};
+const C2 = [
+  {txt: 'Don Ernesto, 58 años, recibió el diagnóstico de una enfermedad crónica sin cura. Dice: «¿Para qué seguir si ya no puedo hacer lo que hacía?»',
+   ok: 'actitud', dig: 3,
+   good: 'Cuando algo no se puede cambiar, el sentido puede encontrarse en la actitud con la que se afronta. Dígito descifrado: 3.',
+   bad: 'Ese cajón describe otro tipo de valor. Vuelve a leer el caso: ¿qué recurso tiene esta persona ahora para sostener su sentido frente a algo que no puede cambiar?'},
+  {txt: 'Marcela, 47 años, sus hijos se fueron a estudiar a otra ciudad. Siente que su casa quedó vacía y que ya no tiene un lugar en la vida de nadie.',
+   ok: 'experiencia', dig: 2,
+   good: 'Los vínculos y los momentos vividos ya forman parte de su historia y siguen siendo valiosos. Dígito descifrado: 2.',
+   bad: 'Ese cajón no es el que más ayuda aquí. Piensa en lo que Marcela ya vivió y amó: su experiencia acumulada es un recurso que sigue vigente.'},
+  {txt: 'Julián, 62 años, jubilado, quiere sentirse útil de nuevo. Tiene habilidades de carpintería y muchas ganas de enseñar.',
+   ok: 'creacion', dig: 1,
+   good: 'Su sentido puede renacer en lo que todavía puede hacer y aportar a otros. Dígito descifrado: 1.',
+   bad: 'Ese cajón describe otra dimensión. Pregúntate qué puede hacer o aportar Julián hoy con lo que ya sabe.'}
+];
+let step2 = 0, digits2 = [];
+
+function render2() {
+  if (step2 < 3) {
+    const c = C2[step2];
+    showOv(`
+      <h2>Puerta II · El Archivador del Sentido</h2>
+      <p>Revisas un archivo antiguo con tres cajones. Cada caso pide identificar qué recurso de tu <em>inteligencia cristalizada</em> (la sabiduría que acumulas con la experiencia) puede sostener un sentido. Caso ${step2 + 1} de 3.</p>
+      <div class="caso">${c.txt}</div>
+      <div>${Object.keys(D2).map(k => `<button class="opt" onclick="pick2('${k}')"><b>${D2[k].n}</b><br><small>${D2[k].d}</small></button>`).join('')}</div>
+      <div class="feedback" id="fb">Dígitos descifrados: ${digits2.length ? digits2.join(' · ') : 'ninguno todavía'}</div>
+      <div style="text-align:right"><button class="btn alt" onclick="hint2()">Pista</button></div>
+    `);
+  } else {
+    showOv(`
+      <h2>Candado II · Combinación</h2>
+      <p>Has descifrado los tres dígitos. Escríbelos en el orden en que aparecieron los casos.</p>
+      <input id="code" class="inp" maxlength="3" inputmode="numeric" placeholder="• • •">
+      <div style="text-align:right"><button class="btn" onclick="check2()">Probar combinación</button></div>
+      <div class="feedback" id="fb">Pista: revisa tus respuestas anteriores si la combinación no coincide.</div>
+    `);
+  }
+}
+function hint2() { toast('Pista: pregúntate qué puede seguir haciendo esta persona hoy, aunque algo en su vida haya cambiado.'); }
+function pick2(k) {
+  const c = C2[step2]; const fb = $('fb');
+  if (k === c.ok) {
+    digits2.push(c.dig);
+    answers.push({reto: 'II · Sentido (Frankl)', respuesta: 'Caso ' + (step2 + 1) + ': ' + D2[k].n});
+    fb.className = 'feedback ok';
+    fb.innerHTML = c.good + '<br><br><button class="btn" onclick="next2()">' + (step2 < 2 ? 'Siguiente caso' : 'Ver el candado') + '</button>';
+    document.querySelectorAll('.opt').forEach(b => b.disabled = true);
+  } else {
+    fb.className = 'feedback bad'; fb.textContent = c.bad;
+  }
+}
+function next2() { step2++; render2(); }
+function check2() {
+  const v = $('code').value.trim();
+  const fb = $('fb');
+  if (v === digits2.join('')) unlock(2);
+  else { fb.className = 'feedback bad'; fb.textContent = 'La combinación no coincide. Revisa tus respuestas anteriores.'; }
+}
+window.render2 = render2; window.pick2 = pick2; window.next2 = next2; window.check2 = check2; window.hint2 = hint2;
+
+/* ============================================================
+   RETO III · EL PUENTE DEL FUTURO (SOC · Baltes)
+   ============================================================ */
+const S3 = [
+  {letra: 'S', nombre: 'Seleccionar', txt: 'Tu meta: aprender inglés para aspirar a un ascenso. ¿Cuál es la meta bien seleccionada?',
+   opts: [
+     {t: 'Quiero ser una mejor persona en general', ok: false, m: 'Es una intención valiosa, pero no es concreta ni se puede medir. Elige una meta que puedas observar.'},
+     {t: 'Dedicar 20 minutos diarios al inglés para una entrevista dentro de 6 meses', ok: true, m: 'Clara, medible y con plazo. El primer tramo del puente toma forma.'},
+     {t: 'Dominar el inglés completo este mes', ok: false, m: 'Es tan exigente que probablemente te haría rendirte. Selecciona una meta realista.'}
+   ]},
+  {letra: 'O', nombre: 'Optimizar', txt: 'Tienes poco tiempo y tu energía cambia a lo largo del día. ¿Qué recurso actual conviene optimizar?',
+   opts: [
+     {t: 'Mis noches, cuando llego agotado', ok: false, m: 'Forzar la práctica cuando estás agotado rara vez funciona. Busca el momento en que tu energía es mayor.'},
+     {t: 'Mis mañanas, cuando tengo más energía y la mente está despejada', ok: true, m: 'Exacto: optimizar un recurso que ya tienes multiplica su efecto.'},
+     {t: 'Esperar a tener más tiempo libre algún día', ok: false, m: 'Ese día quizá nunca llegue. Optimiza lo que ya tienes hoy.'}
+   ]},
+  {letra: 'C', nombre: 'Compensar', txt: 'Aparece un obstáculo: cuando hay turnos extra no puedes practicar. ¿Cómo compensas esa pérdida?',
+   opts: [
+     {t: 'Abandono la meta si pierdo un día', ok: false, m: 'Un día perdido no anula el proceso. Compensar es buscar otra vía, no rendirse.'},
+     {t: 'Uso audios de 10 minutos en el trayecto o mientras cocino', ok: true, m: 'Perfecto: encuentras otro medio para seguir avanzando. El puente queda casi completo.'},
+     {t: 'Cambio la meta por otra completamente distinta', ok: false, m: 'Cambiar de meta cada vez que hay un obstáculo impide construir algo firme.'}
+   ]}
+];
+let step3 = 0;
+
+function render3() {
+  const s = S3[step3];
+  showOv(`
+    <h2>Puerta III · El Puente del Futuro</h2>
+    <p>El último obstáculo es un puente inestable. Cada decisión correcta construye un tramo. Aplica el método SOC en orden: <b>Seleccionar</b>, <b>Optimizar</b> y <b>Compensar</b>.</p>
+    <div class="planks">${[0, 1, 2].map(i => `<div class="plank ${i < step3 ? 'done' : ''}"></div>`).join('')}</div>
+    <h3>Paso ${step3 + 1} de 3 · ${s.letra}: ${s.nombre}</h3>
+    <p>${s.txt}</p>
+    <div>${s.opts.map((o, i) => `<button class="opt" onclick="pick3(${i})">${o.t}</button>`).join('')}</div>
+    <div class="feedback" id="fb">Elige con calma. Cada error te mostrará qué ajustar.</div>
+    <div style="text-align:right"><button class="btn alt" onclick="hint3()">Pista</button></div>
+  `);
+}
+function hint3() { toast('Pista: una meta buena es medible y tiene plazo. Un obstáculo se rodea con otro recurso; no se acepta como final.'); }
+function pick3(i) {
+  const s = S3[step3]; const o = s.opts[i]; const fb = $('fb');
+  if (o.ok) {
+    sel3.push(o.t);
+    answers.push({reto: 'III · SOC (Baltes)', respuesta: s.letra + ' · ' + s.nombre + ': ' + o.t});
+    fb.className = 'feedback ok';
+    const last = step3 === 2;
+    fb.innerHTML = o.m + '<br><br><button class="btn" onclick="next3()">' + (last ? 'Cruzar el puente' : 'Construir el siguiente tramo') + '</button>';
+    document.querySelectorAll('.opt').forEach(b => b.disabled = true);
+  } else {
+    fb.className = 'feedback bad'; fb.textContent = o.m;
+  }
+}
+function next3() {
+  step3++;
+  if (step3 >= 3) unlock(3); else render3();
+}
+window.render3 = render3; window.pick3 = pick3; window.next3 = next3; window.hint3 = hint3;
+
+/* ============================================================
+   FINAL Y CERTIFICADO
+   ============================================================ */
+function finale() {
+  showOv(`
+    <h2>¡Escapaste de la habitación del estancamiento!</h2>
+    <p>Cruzaste el puente y la puerta se abrió hacia la segunda mitad de tu camino. Escribe tu nombre para generar tu <b>Certificado de Transición y Plan de Ruta Personal</b> con las decisiones que tomaste.</p>
+    <input id="nm" class="inp" style="font-size:16px;letter-spacing:0" placeholder="Tu nombre">
+    <div style="text-align:right"><button class="btn" onclick="cert()">Generar certificado</button></div>
+  `);
+}
+function cert() {
+  const name = $('nm').value.trim() || 'Jugador';
+  const items = answers.map(a => `<li><b>${a.reto}:</b> ${a.respuesta}</li>`).join('');
+  const plan = sel3.length === 3
+    ? `<p><b>Meta:</b> ${sel3[0]}</p><p><b>Recurso a optimizar:</b> ${sel3[1]}</p><p><b>Plan frente al obstáculo:</b> ${sel3[2]}</p>`
+    : '<p>Completa el Reto III para registrar tu plan de ruta.</p>';
+  showOv(`
+    <div id="cert" class="cert">
+      <h2 style="text-align:center">Certificado de Transición</h2>
+      <p style="text-align:center">Se certifica que <b>${name}</b> atravesó la Habitación de la Mitad del Camino el 17 de noviembre de 2026.</p>
+      <h3>Decisiones tomadas en el juego</h3>
+      <ul>${items}</ul>
+      <h3>Plan de Ruta Personal</h3>
+      ${plan}
+    </div>
+    <div style="text-align:right;margin-top:12px">
+      <button class="btn" onclick="printCert()">Imprimir / Guardar como PDF</button>
+      <button class="btn alt" onclick="hideOv()">Cerrar</button>
+    </div>
+    <p style="font-size:13px;opacity:.8">Si el botón no abre la impresión, usa Ctrl+P (o Cmd+P) o una captura de pantalla del certificado.</p>
+  `);
+}
+function printCert() { try { window.print(); } catch (e) { toast('Usa Ctrl+P (o Cmd+P) para guardar el certificado.'); } }
+window.cert = cert; window.printCert = printCert; window.finale = finale;
+
+/* ============================================================
+   BUCLE DE RENDER
+   ============================================================ */
+const clock = new THREE.Clock();
+function loop() {
+  const t = clock.getElapsedTime();
+  camera.rotation.set(pitch, yaw, 0);
+  lamp.intensity = 1.5 + Math.sin(t * 2.7) * 0.06 + Math.sin(t * 7.1) * 0.03;
+  for (let i = 0; i < DN; i++) {
+    dpos[i*3+1] += 0.0012 + Math.sin(t + i) * 0.0006;
+    if (dpos[i*3+1] > 3.8) dpos[i*3+1] = 0;
+  }
+  dg.attributes.position.needsUpdate = true;
+  if (!introOn) {
+    const s = Math.floor((performance.now() - startT) / 1000);
+    $('tim').textContent = 'Tiempo: ' + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  }
+  DOORS.forEach(d => {
+    const s = doorState[d.id];
+    s.pivot.rotation.y += (s.target - s.pivot.rotation.y) * 0.04;
+  });
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+loop();
+updateProgress();
+</script>
+<script>let NV = null, NVC = null, NVD = []; function nvNorm(s) { return s.trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } function nvRiddle(cfg) { NV = cfg; showOv('<h2>' + cfg.title + '</h2><div class="caso">' + cfg.text + '</div><input id="nvAns" class="inp" style="font-size:18px;letter-spacing:2px" placeholder="Tu respuesta" autocomplete="off"><div style="text-align:right"><button class="btn alt" onclick="toast(NV.hint)">Pista</button><button class="btn" onclick="nvCheck()">Descifrar</button></div><div class="feedback" id="fb">Descifra la pista para continuar.</div>'); } function nvCheck() { const fb = $('fb'); if (nvNorm($('nvAns').value) === nvNorm(NV.answer)) { fb.className = 'feedback ok'; fb.innerHTML = NV.ok + '<br><br><button class="btn" onclick="NV.next()">Continuar</button>'; } else { fb.className = 'feedback bad'; fb.textContent = 'Eso no descifra la clave. Vuelve a leer el texto o usa la pista.'; } } function nvShuffle(a) { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = b[i]; b[i] = b[j]; b[j] = t; } return b; } function nvChoice(cfg) { cfg.opts = nvShuffle(cfg.opts); NVC = cfg; showOv('<h2>' + cfg.title + '</h2><p>' + cfg.intro + '</p><div>' + cfg.opts.map((o, i) => '<button class="opt" onclick="nvPick(' + i + ')">' + o.t + '</button>').join('') + '</div><div class="feedback" id="fb">Elige con calma. Cada error te mostrará qué ajustar.</div>'); } function nvPick(i) { const o = NVC.opts[i]; const fb = $('fb'); if (o.ok) { answers.push({reto: NVC.reto, respuesta: o.t}); if (NVC.sel) NVC.sel.forEach(x => sel3.push(x)); fb.className = 'feedback ok'; fb.innerHTML = NVC.okMsg + '<br><br><button class="btn" onclick="NVC.done()">' + NVC.btn + '</button>'; document.querySelectorAll('.opt').forEach(b => b.disabled = true); } else { fb.className = 'feedback bad'; fb.textContent = NVC.badMsg; } } function nvP1() { nvRiddle({title: 'Panel 1 · El Escáner de Roles y Sobrecarga', text: 'Alerta amarilla en el radar. Tu energía está repartida así: 50% obligaciones laborales y económicas, 40% responsabilidades familiares y cuidado de otros, 10% tiempo para tus propios intereses.<br><br>Según Erikson, si descuidas tu espacio personal por demasiado tiempo, tu capacidad de aportar a otros empieza a apagarse. Escribe la palabra clave que nombra esa capacidad para desbloquear el panel.', answer: 'GENERATIVIDAD', hint: 'Pista: empieza por G, tiene 13 letras y es la capacidad de aportar a otros (Erikson).', ok: '¡Palabra clave correcta! Ahora elige la decisión preventiva más saludable.', next: nvP1Choice}); } function nvP1Choice() { nvChoice({reto: 'Panel 1 · Roles (Levinson y Erikson)', title: 'Panel 1 · Decisión preventiva', intro: 'Para desbloquear el primer cerrojo, elige la decisión más saludable:', opts: [{t: 'Seguir igual; cuando me jubile o los hijos crezcan tendré tiempo para mí.', ok: false}, {t: 'Reorganizar mi semana para proteger al menos dos horas exclusivas para un interés propio, sin culpa.', ok: true}, {t: 'Asumir más horas de trabajo para mantener la mente ocupada y no pensar en el futuro.', ok: false}], okMsg: '¡Primer cerrojo abierto! Proteger tu tiempo personal no es egoísmo: es lo que mantiene tu capacidad de aportar.', badMsg: 'El cerrojo sigue cerrado. Postergar tus deseos indefinidamente o esconderte en el exceso de trabajo no evita el desgaste; solo lo acumula. Cuidar tu propio espacio es el combustible para seguir acompañando a quienes amas.', btn: 'Continuar al Panel 2', done: () => unlock(1)}); } function nvP2() { nvRiddle({title: 'Panel 2 · El Desactivador de Rutina', text: '¡Primer cerrojo abierto! Ahora tres luces rojas parpadean: «Ya pasó mi momento», «No tengo la energía de antes» y «Todo sigue igual». Tienes un proyecto guardado hace años, pero el tiempo no te alcanza.<br><br>Para apagarlas necesitas la estrategia de Paul Baltes, que se forma con tres verbos en orden: Seleccionar, Optimizar y Compensar. Escribe las iniciales de esa estrategia, en orden, para descifrarla.', answer: 'SOC', hint: 'Pista: toma la primera letra de cada verbo, en el orden en que aparecen.', ok: '¡Estrategia descifrada! Ahora aplícala a tu situación.', next: nvP2Choice}); } function nvP2Choice() { nvChoice({reto: 'Panel 2 · Modelo SOC (Baltes)', title: 'Panel 2 · Apagar las luces rojas', intro: 'Usando tu inteligencia cristalizada (tu experiencia y criterio actual), ¿qué estrategia aplicas?', opts: [{t: 'Exigirme avanzar al mismo ritmo acelerado que tenía a los 25 años.', ok: false}, {t: 'Seleccionar una sola meta realista, usar mi experiencia para ir directo al grano y compensar la falta de tiempo dedicándole 20 minutos al día.', ok: true}, {t: 'Cerrar el archivo definitivamente; a esta edad ya es mejor no complicarse con cosas nuevas.', ok: false}], sel: ['20 minutos diarios en un proyecto personal', 'Experiencia y criterio actual', 'Constancia en pequeñas dosis'], okMsg: '¡Las luces se apagan! En la adultez media no pierdes capacidad: ganas criterio. Avanzas a la Bóveda del Sentido.', badMsg: 'Las luces rojas siguen encendidas. En la adultez media no pierdes capacidad: ganas criterio, experiencia y sabiduría práctica. El secreto es seleccionar lo que importa, optimizar lo que ya sabes y compensar las limitaciones de tiempo con constancia.', btn: 'Entrar a la Bóveda', done: () => unlock(2)}); } const NVR = [{title: 'Dígito 1 de 3 · Valores de Creación', text: 'No necesitas cambiar el mundo entero; basta con un aporte que te ilusione hoy. Soy el primero de la lista y el único que necesitas para crear. ¿Cómo me escribo en letras?', answer: 'UNO', hint: 'Pista: es el número 1, escrito en español.', dig: '1'}, {title: 'Dígito 2 de 3 · Valores de Experiencia', text: 'El bienestar diario se nutre de dos fuentes inmediatas: conectar con personas valiosas y disfrutar el presente. Soy el número que llega justo después del uno. ¿Cómo me escribo en letras?', answer: 'DOS', hint: 'Pista: cuenta en voz baja: uno, dos… ¿cuál sigue?', dig: '2'}, {title: 'Dígito 3 de 3 · Valores de Actitud', text: 'Frente a los cambios físicos y el paso del tiempo, cuentas con tres herramientas interiores: aceptar, adaptar y avanzar. Soy el número que completa esa lista. ¿Cómo me escribo en letras?', answer: 'TRES', hint: 'Pista: son las tres herramientas: aceptar, adaptar y avanzar.', dig: '3'}]; function nvBoveda(i) { if (i < 3) { const R = NVR[i]; nvRiddle({title: 'Bóveda del Sentido · ' + R.title, text: R.text, answer: R.answer, hint: R.hint, ok: 'Dígito descifrado.', next: () => { NVD.push(R.dig); nvBoveda(i + 1); }}); } else { nvVault(); } } function nvVault() { showOv('<h2>Bóveda del Sentido · Combinación</h2><p>Has descifrado los tres dígitos. Ingrésalos en el orden de los valores: creación, experiencia y actitud.</p><input id="nvCode" class="inp" maxlength="3" inputmode="numeric" placeholder="• • •"><div style="text-align:right"><button class="btn" onclick="nvVaultCheck()">Abrir la bóveda</button></div><div class="feedback" id="fb">La bóveda permanece cerrada hasta que ingreses la combinación correcta.</div>'); } function nvVaultCheck() { if ($('nvCode').value.trim() === NVD.join('')) { unlock(3); } else { const fb = $('fb'); fb.className = 'feedback bad'; fb.textContent = 'La bóveda permanece cerrada. Vuelve a leer las pistas de cada valor.'; } } function openPuzzle(n) { if (solved[n]) return toast('Este candado ya está abierto.'); if (n === 2 && !solved[1]) return toast('Primero abre el Panel 1: el Escáner de Roles.'); if (n === 3 && !solved[2]) return toast('Primero abre el Panel 2: el Desactivador de Rutina.'); if (n === 1) return nvChain1(); if (n === 2) return nvChain2(); return nvChain3(); } let NVS = null, NVQ = null; function nvSearch(c) { const sh = nvShuffle(c.items.map((_, i) => i)); c.items = sh.map(i => c.items[i]); c.correct = sh.indexOf(c.correct); NVS = c; showOv('<h2>' + c.title + '</h2><div class="caso">' + c.text + '</div><p><em>Usa la lupa: toca el objeto que buscas.</em></p><div style="text-align:right"><button class="btn alt" onclick="toast('Pista: busca el objeto que describe el recuerdo y descarta los que no encajan.')">Pista</button></div><div style="text-align:center">' + c.items.map((it, i) => '<button class="opt" style="display:inline-block;width:150px;margin:6px;text-align:center;font-size:17px" onclick="nvFind(' + i + ')">' + it + '</button>').join('') + '</div><div class="feedback" id="fb">Hay un objeto que pertenece a este recuerdo. Búscalo con calma.</div>'); } function nvFind(i) { const fb = $('fb'); if (i === NVS.correct) { fb.className = 'feedback ok'; fb.innerHTML = NVS.ok + '<br><br><button class="btn" onclick="NVS.next()">Continuar</button>'; } else { fb.className = 'feedback bad'; fb.textContent = 'Ese objeto no es. Mira en los rincones: algo cerrado guarda lo que buscas.'; } } function nvSeq(c) { do { c.shown = nvShuffle(c.shown); } while (c.shown.join('|') === c.order.join('|')); NVQ = c; NVQ.n = 0; showOv('<h2>' + c.title + '</h2><p>' + c.text + '</p><div style="text-align:center">' + c.shown.map((s, i) => '<button class="opt" id="sq' + i + '" style="display:inline-block;width:220px;margin:6px;text-align:center" onclick="nvSeqPick(' + i + ')">' + s + '</button>').join('') + '</div><div style="text-align:right"><button class="btn alt" onclick="toast('Pista: piensa en qué orden ocurrieron las cosas en tu vida, o en qué orden se aplican los pasos.')">Pista</button></div><div class="feedback" id="fb">Toca los recuerdos en orden, del más antiguo al más reciente.</div>'); } function nvSeqPick(i) { const fb = $('fb'); const b = document.getElementById('sq' + i); if (NVQ.shown[i] === NVQ.order[NVQ.n]) { NVQ.n++; b.disabled = true; b.style.opacity = 0.4; if (NVQ.n === NVQ.order.length) { fb.className = 'feedback ok'; fb.innerHTML = NVQ.ok + '<br><br><button class="btn" onclick="NVQ.next()">Continuar</button>'; } } else { NVQ.n = 0; NVQ.shown.forEach((_, k) => { const x = document.getElementById('sq' + k); x.disabled = false; x.style.opacity = 1; }); fb.className = 'feedback bad'; fb.textContent = 'Ese recuerdo no va en ese lugar del tiempo. Empieza de nuevo.'; } } function nvChain1() { nvSearch({title: 'Recuerdo I · La sala de tu casa', text: 'Una tarde de domingo, la sala huele a café y a madera. En la repisa se esconde la llave de la caja donde guardas lo que importa.', items: ['📖 Libro', '🧸 Peluche', '🔑 Llave', '🪴 Maceta', '☕ Taza', '🧩 Rompecabezas'], correct: 2, ok: 'Encontraste la llave. Ahora ordena los recuerdos de tu vida en esta casa.', next: () => nvSeq({title: 'Recuerdo I · La línea del tiempo', text: 'Ordena estos recuerdos del más antiguo al más reciente.', shown: ['Ver crecer a tus hijos', 'Tu primer trabajo', 'Una tarde de planes solo para ti', 'Mudarte a la casa nueva'], order: ['Tu primer trabajo', 'Mudarte a la casa nueva', 'Ver crecer a tus hijos', 'Una tarde de planes solo para ti'], ok: 'La línea del tiempo está completa. Ahora descifra la palabra clave de tu primer cerrojo.', next: nvP1})}); } function nvChain2() { nvSearch({title: 'Recuerdo II · El cuarto de trabajo', text: 'Recuerdas la mesa de trabajo, llena de papeles. Entre ellos hay uno con números que guarda tu proyecto pendiente. Encuéntralo con la lupa.', items: ['🧾 Recibo', '📝 Lista de compras', '🔢 Papel con números', '📷 Foto', '🕰️ Reloj', '📎 Clip'], correct: 2, ok: '¡Ahí estaba! Ahora ordena los pasos de tu estrategia.', next: () => nvSeq({title: 'Recuerdo II · Los pasos de tu proyecto', text: 'Ordena los pasos de la estrategia como se aplican: primero, segundo y tercero.', shown: ['Compensar', 'Seleccionar', 'Optimizar'], order: ['Seleccionar', 'Optimizar', 'Compensar'], ok: 'Los pasos están en orden. Ahora descifra la estrategia.', next: nvP2})}); } function nvChain3() { nvSearch({title: 'Recuerdo III · El ático', text: 'Subes al ático, entre cajas de tu vida. Una carpeta de cartas guarda las palabras que te dijiste en los momentos difíciles. Encuéntrala con la lupa.', items: ['🎂 Caja de cumpleaños', '📦 Caja vieja', '🧣 Bufanda', '🗂️ Carpeta de cartas', '🎵 Disco', '🪞 Espejo'], correct: 3, ok: 'Encontraste la carpeta. Ahora ordena las herramientas interiores frente al cambio.', next: () => nvSeq({title: 'Recuerdo III · Las herramientas', text: 'Ordena las herramientas interiores como las usas frente al cambio: primero, segundo y tercero.', shown: ['Avanzar', 'Aceptar', 'Adaptar'], order: ['Aceptar', 'Adaptar', 'Avanzar'], ok: 'Las herramientas están en orden. Ahora descifra los tres valores de la bóveda.', next: () => { NVD = []; nvBoveda(0); }})}); }</script>
+</body>
+</html>
